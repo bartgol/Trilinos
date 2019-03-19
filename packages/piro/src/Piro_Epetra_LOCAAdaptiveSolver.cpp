@@ -369,9 +369,19 @@ void Piro::Epetra::LOCAAdaptiveSolver::evalModel( const InArgs& inArgs,
       // columns in df/dp should be the number of chosen p's, not the total
       // number of p's.
       Teuchos::RCP<const Epetra_Map> p_map = model->get_p_map(i);
-      Teuchos::RCP<Epetra_MultiVector> dfdp =
-	Teuchos::rcp(new Epetra_MultiVector(*(model->get_f_map()),
-					    p_map->NumGlobalElements()));
+      Teuchos::RCP<Epetra_MultiVector> dfdp;
+      if (p_map->GlobalIndicesInt()) {
+        dfdp = Teuchos::rcp(new Epetra_MultiVector(*(model->get_f_map()), p_map->NumGlobalElements()));
+      } else if (p_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(p_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The p_map uses long long global indices, and the p_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        dfdp = Teuchos::rcp(new Epetra_MultiVector(*(model->get_f_map()), static_cast<int>(p_map->NumGlobalElements64())));
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the p_map are neither 'int' nor 'long long'.\n");
+      }
       // Teuchos::Array<int> p_indexes =
       // 	outArgs.get_DgDp(i,0).getDerivativeMultiVector().getParamIndexes();
       // EpetraExt::ModelEvaluator::DerivativeMultiVector
@@ -402,9 +412,19 @@ void Piro::Epetra::LOCAAdaptiveSolver::evalModel( const InArgs& inArgs,
     }
     if (do_sens) {
       Teuchos::RCP<const Epetra_Map> g_map = model->get_g_map(j);
-      Teuchos::RCP<Epetra_MultiVector> dgdx =
-	Teuchos::rcp(new Epetra_MultiVector(finalSolution->Map(),
-					    g_map->NumGlobalElements()));
+      Teuchos::RCP<Epetra_MultiVector> dgdx;
+      if (g_map->GlobalIndicesInt()) {
+        dgdx = Teuchos::rcp(new Epetra_MultiVector(finalSolution->Map(), g_map->NumGlobalElements()));
+      } else if (g_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(g_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The p_map uses long long global indices, and the p_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        dgdx = Teuchos::rcp(new Epetra_MultiVector(finalSolution->Map(), static_cast<int>(g_map->NumGlobalElements64())));
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the g_map are neither 'int' nor 'long long'.\n");
+      }
       model_outargs.set_DgDx(j,dgdx);
 
       for (int i=0; i<num_p; i++) {

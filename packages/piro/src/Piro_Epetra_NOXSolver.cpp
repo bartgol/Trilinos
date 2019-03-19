@@ -474,8 +474,31 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
     if (do_sens) {
       Teuchos::RCP<const Epetra_Map> p_map = model->get_p_map(i);
       Teuchos::RCP<const Epetra_Map> f_map = model->get_f_map();
-      int num_params = p_map->NumGlobalElements();
-      int num_resids = f_map->NumGlobalElements();
+      int num_params, num_resids;
+      if (p_map->GlobalIndicesInt()) {
+        num_params = p_map->NumGlobalElements();
+      } else if (p_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(p_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The p_map uses long long global indices, and the p_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        num_params = static_cast<int>(p_map->NumGlobalElements64());
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the p_map are neither 'int' nor 'long long'.\n");
+      }
+      if (f_map->GlobalIndicesInt()) {
+        num_resids = f_map->NumGlobalElements();
+      } else if (f_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(f_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The f_map uses long long global indices, and the f_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        num_resids = static_cast<int>(f_map->NumGlobalElements64());
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the f_map are neither 'int' nor 'long long'.\n");
+      }
       bool p_dist = p_map->DistributedGlobal();
       bool f_dist = f_map->DistributedGlobal();
       DerivativeSupport ds =  model_outargs.supports(OUT_ARG_DfDp,i);
@@ -584,45 +607,68 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
     if (do_sens) {
       Teuchos::RCP<const Epetra_Map> g_map = model->get_g_map(j);
       Teuchos::RCP<const Epetra_Map> x_map = model->get_x_map();
-      int num_responses = g_map->NumGlobalElements();
-      int num_solution = x_map->NumGlobalElements();
+      int num_responses, num_solution;
+      if (g_map->GlobalIndicesInt()) {
+        num_responses = g_map->NumGlobalElements();
+      } else if (g_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(g_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The g_map uses long long global indices, and the g_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        num_responses = static_cast<int>(g_map->NumGlobalElements64());
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the g_map are neither 'int' nor 'long long'.\n");
+      }
+      if (x_map->GlobalIndicesInt()) {
+        num_solution = x_map->NumGlobalElements();
+      } else if (x_map->GlobalIndicesLongLong()) {
+        const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+        TEUCHOS_TEST_FOR_EXCEPTION(x_map->NumGlobalElements64()<=max_safe_long_long,
+                                   std::runtime_error,
+                                   "Error! The x_map uses long long global indices, and the x_map size is "
+                                   "larger than the largest int. This would cause overflow when casting to int.\n");
+        num_solution = static_cast<int>(x_map->NumGlobalElements64());
+      } else {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the x_map are neither 'int' nor 'long long'.\n");
+      }
       bool g_dist = g_map->DistributedGlobal();
       bool x_dist = x_map->DistributedGlobal();
       DerivativeSupport ds =  model_outargs.supports(OUT_ARG_DgDx,j);
       DerivativeLayout dgdx_layout;
       if (sensitivity_method == "Forward") {
-	if (ds.supports(DERIV_LINEAR_OP))
+        if (ds.supports(DERIV_LINEAR_OP))
           dgdx_layout = OP;
         else if (ds.supports(DERIV_MV_BY_COL) && !x_dist)
           dgdx_layout = COL;
         else if (ds.supports(DERIV_TRANS_MV_BY_ROW) && !g_dist)
           dgdx_layout = ROW;
-	else
-	  TEUCHOS_TEST_FOR_EXCEPTION(
-	    true, std::logic_error, 
-	    std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
-	    "For dg/dx(" << j <<") with forward sensitivities, " <<
-	    "underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
-	    "DERIV_MV_BY_COL with x not distributed, or "
-	    "DERIV_TRANS_MV_BY_ROW with g not distributed." <<
-	    std::endl);
-      }
-      else if (sensitivity_method == "Adjoint") {
-	if (ds.supports(DERIV_TRANS_MV_BY_ROW) && !g_dist)
-          dgdx_layout = ROW;
-	else if (ds.supports(DERIV_MV_BY_COL) && !x_dist)
-          dgdx_layout = COL;
-	else if (ds.supports(DERIV_LINEAR_OP))
-          dgdx_layout = OP;
         else
-	  TEUCHOS_TEST_FOR_EXCEPTION(
-	    true, std::logic_error, 
-	    std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
-	    "For dg/dx(" << j <<") with adjoint sensitivities, " <<
-	    "underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
-	    "DERIV_MV_BY_COL with x not distributed, or "
-	    "DERIV_TRANS_MV_BY_ROW with g not distributed." <<
-	    std::endl);
+          TEUCHOS_TEST_FOR_EXCEPTION(
+            true, std::logic_error, 
+            std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
+            "For dg/dx(" << j <<") with forward sensitivities, " <<
+            "underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
+            "DERIV_MV_BY_COL with x not distributed, or "
+            "DERIV_TRANS_MV_BY_ROW with g not distributed." <<
+            std::endl);
+            }
+      else if (sensitivity_method == "Adjoint") {
+        if (ds.supports(DERIV_TRANS_MV_BY_ROW) && !g_dist)
+                dgdx_layout = ROW;
+        else if (ds.supports(DERIV_MV_BY_COL) && !x_dist)
+                dgdx_layout = COL;
+        else if (ds.supports(DERIV_LINEAR_OP))
+                dgdx_layout = OP;
+        else
+          TEUCHOS_TEST_FOR_EXCEPTION(
+            true, std::logic_error, 
+            std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
+            "For dg/dx(" << j <<") with adjoint sensitivities, " <<
+            "underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
+            "DERIV_MV_BY_COL with x not distributed, or "
+            "DERIV_TRANS_MV_BY_ROW with g not distributed." <<
+            std::endl);
       }
       else
         TEUCHOS_TEST_FOR_EXCEPTION(true, 
@@ -634,78 +680,101 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
                            << std::endl);
 
       if (dgdx_layout == OP) {
-	Teuchos::RCP<Epetra_Operator> dgdx_op = model->create_DgDx_op(j);
-	TEUCHOS_TEST_FOR_EXCEPTION(
-	  dgdx_op == Teuchos::null, std::logic_error, 
-	  std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
-	  "Needed dg/dx operator (" << j << ") is null!" << std::endl);
-	model_outargs.set_DgDx(j,dgdx_op);
+        Teuchos::RCP<Epetra_Operator> dgdx_op = model->create_DgDx_op(j);
+        TEUCHOS_TEST_FOR_EXCEPTION(
+          dgdx_op == Teuchos::null, std::logic_error, 
+          std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
+          "Needed dg/dx operator (" << j << ") is null!" << std::endl);
+        model_outargs.set_DgDx(j,dgdx_op);
       }
       else if (dgdx_layout == ROW) {
-	Teuchos::RCP<Epetra_MultiVector> dgdx = 
-	  Teuchos::rcp(new Epetra_MultiVector(*x_map, num_responses));
-	EpetraExt::ModelEvaluator::DerivativeMultiVector 
-	  dmv_dgdx(dgdx, DERIV_TRANS_MV_BY_ROW);
-	model_outargs.set_DgDx(j,dmv_dgdx);
+        Teuchos::RCP<Epetra_MultiVector> dgdx = 
+          Teuchos::rcp(new Epetra_MultiVector(*x_map, num_responses));
+        EpetraExt::ModelEvaluator::DerivativeMultiVector 
+          dmv_dgdx(dgdx, DERIV_TRANS_MV_BY_ROW);
+        model_outargs.set_DgDx(j,dmv_dgdx);
       }
       else if (dgdx_layout == COL) {
-	Teuchos::RCP<Epetra_MultiVector> dgdx = 
-	  Teuchos::rcp(new Epetra_MultiVector(*g_map, num_solution));
-	EpetraExt::ModelEvaluator::DerivativeMultiVector 
-	  dmv_dgdx(dgdx, DERIV_MV_BY_COL);
-	model_outargs.set_DgDx(j,dmv_dgdx);
+        Teuchos::RCP<Epetra_MultiVector> dgdx = 
+          Teuchos::rcp(new Epetra_MultiVector(*g_map, num_solution));
+        EpetraExt::ModelEvaluator::DerivativeMultiVector 
+          dmv_dgdx(dgdx, DERIV_MV_BY_COL);
+        model_outargs.set_DgDx(j,dmv_dgdx);
       }
 
       // dg/dp
       for (int i=0; i<num_p; i++) {
-	if (!outArgs.supports(OUT_ARG_DgDp,j,i).none()) {
-	  Derivative dgdp = outArgs.get_DgDp(j,i);
-	  if (dgdp.getLinearOp() != Teuchos::null) {
-	    Teuchos::RCP<const Epetra_Map> g_map = model->get_g_map(j);
-	    Teuchos::RCP<const Epetra_Map> p_map = model->get_p_map(i);
-	    int num_responses = g_map->NumGlobalElements();
-	    int num_params = p_map->NumGlobalElements();
-	    bool g_dist = g_map->DistributedGlobal();
-	    bool p_dist = p_map->DistributedGlobal();
-	    DerivativeSupport ds = model_outargs.supports(OUT_ARG_DgDp,j,i);
-	    if (ds.supports(DERIV_LINEAR_OP)) {
-	      Teuchos::RCP<Epetra_Operator> dgdp_op = 
-		model->create_DgDp_op(j,i);
-	      TEUCHOS_TEST_FOR_EXCEPTION(
-		dgdp_op == Teuchos::null, std::logic_error, 
-		std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
-		"Needed dg/dp operator (" << j << "," << i << ") is null!" << 
-		std::endl);
-	      model_outargs.set_DgDp(j,i,dgdp_op);
-	    }
-	    else if (ds.supports(DERIV_MV_BY_COL) && !p_dist) {
-	      Teuchos::RCP<Epetra_MultiVector> dgdp =
-		Teuchos::rcp(new Epetra_MultiVector(*g_map, num_params));
-	      EpetraExt::ModelEvaluator::DerivativeMultiVector 
-		dmv_dgdp(dgdp, DERIV_MV_BY_COL);
-	      model_outargs.set_DgDp(j,i,dmv_dgdp);
-	    }
-	    else if (ds.supports(DERIV_TRANS_MV_BY_ROW) && !g_dist) {
-	      Teuchos::RCP<Epetra_MultiVector> dgdp =
-		Teuchos::rcp(new Epetra_MultiVector(*p_map, num_responses));
-	      EpetraExt::ModelEvaluator::DerivativeMultiVector 
-		dmv_dgdp(dgdp, DERIV_TRANS_MV_BY_ROW);
-	      model_outargs.set_DgDp(j,i,dmv_dgdp);
-	    }
-	    else
-	      TEUCHOS_TEST_FOR_EXCEPTION(
-		true, std::logic_error, 
-		std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
-		"For dg/dp(" << j << "," << i <<
-		") with operator sensitivities, "<<
-		"underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
-		"DERIV_MV_BY_COL with p not distributed, or "
-		"DERIV_TRANS_MV_BY_ROW with g not distributed." <<
-		std::endl);
-	  }
-	  else
-	    model_outargs.set_DgDp(j,i,outArgs.get_DgDp(j,i));
-	}
+        if (!outArgs.supports(OUT_ARG_DgDp,j,i).none()) {
+          Derivative dgdp = outArgs.get_DgDp(j,i);
+          if (dgdp.getLinearOp() != Teuchos::null) {
+            Teuchos::RCP<const Epetra_Map> g_map = model->get_g_map(j);
+            Teuchos::RCP<const Epetra_Map> p_map = model->get_p_map(i);
+            int num_responses, num_params;
+            if (g_map->GlobalIndicesInt()) {
+              num_responses = g_map->NumGlobalElements();
+            } else if (g_map->GlobalIndicesLongLong()) {
+              const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+              TEUCHOS_TEST_FOR_EXCEPTION(g_map->NumGlobalElements64()<=max_safe_long_long,
+                                         std::runtime_error,
+                                         "Error! The g_map uses long long global indices, and the g_map size is "
+                                         "larger than the largest int. This would cause overflow when casting to int.\n");
+              num_responses = static_cast<int>(g_map->NumGlobalElements64());
+            } else {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the g_map are neither 'int' nor 'long long'.\n");
+            }
+            if (p_map->GlobalIndicesInt()) {
+              num_params = p_map->NumGlobalElements();
+            } else if (p_map->GlobalIndicesLongLong()) {
+              const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+              TEUCHOS_TEST_FOR_EXCEPTION(p_map->NumGlobalElements64()<=max_safe_long_long,
+                                         std::runtime_error,
+                                         "Error! The p_map uses long long global indices, and the p_map size is "
+                                         "larger than the largest int. This would cause overflow when casting to int.\n");
+              num_params = static_cast<int>(p_map->NumGlobalElements64());
+            } else {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the p_map are neither 'int' nor 'long long'.\n");
+            }
+            g_dist = g_map->DistributedGlobal();
+            bool p_dist = p_map->DistributedGlobal();
+            DerivativeSupport ds = model_outargs.supports(OUT_ARG_DgDp,j,i);
+            if (ds.supports(DERIV_LINEAR_OP)) {
+              Teuchos::RCP<Epetra_Operator> dgdp_op = 
+                model->create_DgDp_op(j,i);
+              TEUCHOS_TEST_FOR_EXCEPTION(
+                dgdp_op == Teuchos::null, std::logic_error, 
+                std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
+                "Needed dg/dp operator (" << j << "," << i << ") is null!" << 
+                std::endl);
+              model_outargs.set_DgDp(j,i,dgdp_op);
+            }
+            else if (ds.supports(DERIV_MV_BY_COL) && !p_dist) {
+              Teuchos::RCP<Epetra_MultiVector> dgdp =
+                Teuchos::rcp(new Epetra_MultiVector(*g_map, num_params));
+              EpetraExt::ModelEvaluator::DerivativeMultiVector 
+                dmv_dgdp(dgdp, DERIV_MV_BY_COL);
+              model_outargs.set_DgDp(j,i,dmv_dgdp);
+            }
+            else if (ds.supports(DERIV_TRANS_MV_BY_ROW) && !g_dist) {
+              Teuchos::RCP<Epetra_MultiVector> dgdp =
+                Teuchos::rcp(new Epetra_MultiVector(*p_map, num_responses));
+              EpetraExt::ModelEvaluator::DerivativeMultiVector 
+                dmv_dgdp(dgdp, DERIV_TRANS_MV_BY_ROW);
+              model_outargs.set_DgDp(j,i,dmv_dgdp);
+            }
+            else
+              TEUCHOS_TEST_FOR_EXCEPTION(
+                true, std::logic_error, 
+                std::endl << "Piro::Epetra::NOXSolver::evalModel():  " << 
+                "For dg/dp(" << j << "," << i <<
+                ") with operator sensitivities, "<<
+                "underlying ModelEvaluator must support DERIV_LINEAR_OP, " <<
+                "DERIV_MV_BY_COL with p not distributed, or "
+                "DERIV_TRANS_MV_BY_ROW with g not distributed." <<
+                std::endl);
+          }
+          else
+            model_outargs.set_DgDp(j,i,outArgs.get_DgDp(j,i));
+        }
       }
     }
   }
@@ -721,16 +790,16 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
   for (int i=0; i<num_p; i++) {
     for (int j=0; j<num_g; j++) {
       if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
-	if (outArgs.get_DgDp(j,i).getLinearOp() != Teuchos::null) {
-	  Teuchos::RCP<Epetra_Operator> op = 
-	    outArgs.get_DgDp(j,i).getLinearOp();
-	  Teuchos::RCP<SensitivityOperator> sens_op =
-	    Teuchos::rcp_dynamic_cast<SensitivityOperator>(op);
-	  sens_op->setup(model_outargs.get_DfDp(i), 
-			 model_outargs.get_DgDx(j),
-			 model_outargs.get_DgDp(j,i), 
-			 piroParams, grp, tls_strategy);
-	}
+	      if (outArgs.get_DgDp(j,i).getLinearOp() != Teuchos::null) {
+	        Teuchos::RCP<Epetra_Operator> op = 
+	          outArgs.get_DgDp(j,i).getLinearOp();
+	        Teuchos::RCP<SensitivityOperator> sens_op =
+	          Teuchos::rcp_dynamic_cast<SensitivityOperator>(op);
+	        sens_op->setup(model_outargs.get_DfDp(i), 
+	      		 model_outargs.get_DgDx(j),
+	      		 model_outargs.get_DgDp(j,i), 
+	      		 piroParams, grp, tls_strategy);
+	      }
       }
     }
   }
@@ -742,112 +811,112 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
       // that aren't handled by the operator
       do_sens = false;
       for (int j=0; j<num_g; j++) {
-	if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
-	  if (outArgs.get_DgDp(j,i).getMultiVector() != Teuchos::null)
-	    do_sens = true;
-	}
+        if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
+          if (outArgs.get_DgDp(j,i).getMultiVector() != Teuchos::null)
+            do_sens = true;
+        }
       }
       if (!do_sens)
 	continue;
 
       if (!model_outargs.supports(OUT_ARG_DfDp, i).none()) {
-	TEUCHOS_TEST_FOR_EXCEPTION(
-	  model_outargs.get_DfDp(i).getLinearOp()!=Teuchos::null,
-	  std::logic_error,
-	  std::endl <<"Piro::Epetra::NOXSolver::evalModel():  " <<
-	  "Can\'t use df/dp operator " << i << " with non-operator " <<
-	  "forward sensitivities." << std::endl);
-	Teuchos::RCP<Epetra_MultiVector> dfdp  = 
-	  model_outargs.get_DfDp(i).getMultiVector();
-	if (dfdp != Teuchos::null) {
-	  int num_cols = dfdp->NumVectors();
-	
-	  // (2) Calculate dx/dp multivector from -(J^{-1}*df/dp)
-	  Teuchos::RCP<Epetra_MultiVector> dxdp = 
-	    Teuchos::rcp(new Epetra_MultiVector(dfdp->Map(), num_cols));
-	  NOX::Epetra::MultiVector dfdp_nox(
-	    dfdp, NOX::DeepCopy,  
-	    NOX::Epetra::MultiVector::CreateView);
-	  NOX::Epetra::MultiVector dxdp_nox(
-	    dxdp, NOX::DeepCopy,  
-	    NOX::Epetra::MultiVector::CreateView);
-	  
-	  grp->applyJacobianInverseMultiVector(*piroParams, dfdp_nox, dxdp_nox);
-	  dxdp_nox.scale(-1.0);
-	
-	  // (3) Calculate dg/dp = dg/dx*dx/dp + dg/dp
-	  for (int j=0; j<num_g; j++) {
-	    if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
-	      Teuchos::RCP<Epetra_MultiVector> dgdp_out = 
-		outArgs.get_DgDp(j,i).getMultiVector();
-	      if (dgdp_out != Teuchos::null) {
-		Derivative dgdx_dv = model_outargs.get_DgDx(j);
-		Teuchos::RCP<Epetra_Operator> dgdx_op = dgdx_dv.getLinearOp();
-		Teuchos::RCP<Epetra_MultiVector> dgdx = 
-		  dgdx_dv.getMultiVector();
-		Derivative dfdp_dv = model_outargs.get_DfDp(i);
-		EDerivativeMultiVectorOrientation dgdp_orient =
-		  outArgs.get_DgDp(j,i).getMultiVectorOrientation();
-		if (dgdx_op != Teuchos::null) {
-		  bool transpose = false;
-		  if (dgdp_orient == DERIV_TRANS_MV_BY_ROW)
-		    transpose = true;
-		  Epetra_MultiVector tmp(dgdx_op->OperatorRangeMap(),
-					 dxdp->NumVectors());
-		  dgdx_op->Apply(*dxdp, tmp);
-		  if (transpose) {
-		    TEUCHOS_TEST_FOR_EXCEPTION(
-		      dgdp_out->Map().DistributedGlobal(), 
-		      std::logic_error,
-		      std::endl << 
-		      "Piro::Epetra::NOXSolver::evalModel():  " <<
-		      "Can\'t handle special case:  " << 
-		      " dg/dx operator, " <<
-		      " transposed, distributed dg/dp. " << std::endl);
-		    for (int j=0; j<dgdp_out->NumVectors(); j++)
-		      for (int i=0; i<dgdp_out->MyLength(); i++)
-			(*dgdp_out)[j][i] += tmp[i][j];
-		  }
-		  else
-		    dgdp_out->Update(1.0, tmp, 1.0);
-		}
-		else {
-		  Teuchos::RCP<Epetra_MultiVector> arg1, arg2;
-		  EDerivativeMultiVectorOrientation dfdp_orient =
-		    model_outargs.get_DfDp(i).getMultiVectorOrientation();
-		  EDerivativeMultiVectorOrientation dgdx_orient =
-		    model_outargs.get_DgDx(j).getMultiVectorOrientation();
-		  char flag1, flag2;
-		  if (dgdp_orient == DERIV_MV_BY_COL) {
-		    arg1 = dgdx;
-		    arg2 = dxdp;
-		    if (dgdx_orient == DERIV_MV_BY_COL)
-		      flag1 = 'N';
-		    else
-		      flag1 = 'T';
-		    if (dfdp_orient == DERIV_MV_BY_COL)
-		      flag2 = 'N';
-		    else
-		      flag2 = 'T';
-		  }
-		  else {
-		    arg1 = dxdp;
-		    arg2 = dgdx;
-		    if (dfdp_orient == DERIV_MV_BY_COL)
-		      flag1 = 'T';
-		    else
-		      flag1 = 'N';
-		    if (dgdx_orient == DERIV_MV_BY_COL)
-		      flag2 = 'T';
-		    else
-		      flag2 = 'N';
-		  }
-		  dgdp_out->Multiply(flag1, flag2, 1.0, *arg1, *arg2, 1.0);
-		}
+	      TEUCHOS_TEST_FOR_EXCEPTION(
+	        model_outargs.get_DfDp(i).getLinearOp()!=Teuchos::null,
+	        std::logic_error,
+	        std::endl <<"Piro::Epetra::NOXSolver::evalModel():  " <<
+	        "Can\'t use df/dp operator " << i << " with non-operator " <<
+	        "forward sensitivities." << std::endl);
+	      Teuchos::RCP<Epetra_MultiVector> dfdp  = 
+	        model_outargs.get_DfDp(i).getMultiVector();
+	      if (dfdp != Teuchos::null) {
+	        int num_cols = dfdp->NumVectors();
+	      
+	        // (2) Calculate dx/dp multivector from -(J^{-1}*df/dp)
+	        Teuchos::RCP<Epetra_MultiVector> dxdp = 
+	          Teuchos::rcp(new Epetra_MultiVector(dfdp->Map(), num_cols));
+	        NOX::Epetra::MultiVector dfdp_nox(
+	          dfdp, NOX::DeepCopy,  
+	          NOX::Epetra::MultiVector::CreateView);
+	        NOX::Epetra::MultiVector dxdp_nox(
+	          dxdp, NOX::DeepCopy,  
+	          NOX::Epetra::MultiVector::CreateView);
+	        
+	        grp->applyJacobianInverseMultiVector(*piroParams, dfdp_nox, dxdp_nox);
+	        dxdp_nox.scale(-1.0);
+	      
+	        // (3) Calculate dg/dp = dg/dx*dx/dp + dg/dp
+	        for (int j=0; j<num_g; j++) {
+	          if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
+	            Teuchos::RCP<Epetra_MultiVector> dgdp_out = 
+                outArgs.get_DgDp(j,i).getMultiVector();
+	            if (dgdp_out != Teuchos::null) {
+	      	      Derivative dgdx_dv = model_outargs.get_DgDx(j);
+	      	      Teuchos::RCP<Epetra_Operator> dgdx_op = dgdx_dv.getLinearOp();
+	      	      Teuchos::RCP<Epetra_MultiVector> dgdx = 
+	      	        dgdx_dv.getMultiVector();
+	      	      Derivative dfdp_dv = model_outargs.get_DfDp(i);
+	      	      EDerivativeMultiVectorOrientation dgdp_orient =
+	      	        outArgs.get_DgDp(j,i).getMultiVectorOrientation();
+	      	      if (dgdx_op != Teuchos::null) {
+	      	        bool transpose = false;
+	      	        if (dgdp_orient == DERIV_TRANS_MV_BY_ROW)
+	      	          transpose = true;
+	      	        Epetra_MultiVector tmp(dgdx_op->OperatorRangeMap(),
+	      	      			 dxdp->NumVectors());
+	      	        dgdx_op->Apply(*dxdp, tmp);
+	      	        if (transpose) {
+	      	          TEUCHOS_TEST_FOR_EXCEPTION(
+	      	            dgdp_out->Map().DistributedGlobal(), 
+	      	            std::logic_error,
+	      	            std::endl << 
+	      	            "Piro::Epetra::NOXSolver::evalModel():  " <<
+	      	            "Can\'t handle special case:  " << 
+	      	            " dg/dx operator, " <<
+	      	            " transposed, distributed dg/dp. " << std::endl);
+	      	          for (int j=0; j<dgdp_out->NumVectors(); j++)
+	      	            for (int i=0; i<dgdp_out->MyLength(); i++)
+                        (*dgdp_out)[j][i] += tmp[i][j];
+	      	        }
+	      	        else
+	      	          dgdp_out->Update(1.0, tmp, 1.0);
+	      	      }
+	      	      else {
+	      	        Teuchos::RCP<Epetra_MultiVector> arg1, arg2;
+	      	        EDerivativeMultiVectorOrientation dfdp_orient =
+	      	          model_outargs.get_DfDp(i).getMultiVectorOrientation();
+	      	        EDerivativeMultiVectorOrientation dgdx_orient =
+	      	          model_outargs.get_DgDx(j).getMultiVectorOrientation();
+	      	        char flag1, flag2;
+	      	        if (dgdp_orient == DERIV_MV_BY_COL) {
+	      	          arg1 = dgdx;
+	      	          arg2 = dxdp;
+	      	          if (dgdx_orient == DERIV_MV_BY_COL)
+	      	            flag1 = 'N';
+	      	          else
+	      	            flag1 = 'T';
+	      	          if (dfdp_orient == DERIV_MV_BY_COL)
+	      	            flag2 = 'N';
+	      	          else
+	      	            flag2 = 'T';
+	      	        }
+	      	        else {
+	      	          arg1 = dxdp;
+	      	          arg2 = dgdx;
+	      	          if (dfdp_orient == DERIV_MV_BY_COL)
+	      	            flag1 = 'T';
+	      	          else
+	      	            flag1 = 'N';
+	      	          if (dgdx_orient == DERIV_MV_BY_COL)
+	      	            flag2 = 'T';
+	      	          else
+	      	            flag2 = 'N';
+	      	        }
+	      	        dgdp_out->Multiply(flag1, flag2, 1.0, *arg1, *arg2, 1.0);
+	      	      }
+	            }
+	          }
+	        }
 	      }
-	    }
-	  }
-	}
       }
     }
   }
@@ -875,117 +944,117 @@ void Piro::Epetra::NOXSolver::evalModel(const InArgs& inArgs,
 	}
       }
       if (!do_sens)
-	continue;
+        continue;
 
       if (!model_outargs.supports(OUT_ARG_DgDx, j).none()) {
-	TEUCHOS_TEST_FOR_EXCEPTION(
-	  model_outargs.get_DgDx(j).getLinearOp()!=Teuchos::null,
-	  std::logic_error,
-	  std::endl << "Piro::Epetra::NOXSolver::evalModel():  " <<
-	  "Can\'t use dg/dx operator " << j << " with non-operator " << 
-	  "adjoint sensitivities." << std::endl);
-	Teuchos::RCP<Epetra_MultiVector> dgdx  = 
-	  model_outargs.get_DgDx(j).getMultiVector();
-	if (dgdx != Teuchos::null) {
-	  int num_cols = dgdx->NumVectors();
-	
-	  // (2) Calculate xbar multivector from -(J^{-T}*dg/dx)
-	  Teuchos::RCP<Epetra_MultiVector> xbar = 
-	    Teuchos::rcp(new Epetra_MultiVector(dgdx->Map(), num_cols));
-	  for (int col=0; col<num_cols; col++) {
-	    Teuchos::RCP<Epetra_Vector> gx =
-	      Teuchos::rcp((*dgdx)(col),false);
-	    Teuchos::RCP<Epetra_Vector> xb =
-	      Teuchos::rcp((*xbar)(col),false);
-	    NOX::Epetra::Vector dgdx_nox(
-	      gx, NOX::Epetra::Vector::CreateView, NOX::DeepCopy);
-	    NOX::Epetra::Vector xbar_nox(
-	      xb, NOX::Epetra::Vector::CreateView, NOX::DeepCopy);
-	  
-	    // Solve
-	    tls_strategy->applyJacobianTransposeInverse(
-	      *piroParams, dgdx_nox, xbar_nox);
-	  }
-	  xbar->Scale(-1.0);
-	
-	  // (3) Calculate dg/dp^T = df/dp^T*xbar + dg/dp^T
-	  for (int i=0; i<num_p; i++) {
-	    if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
-	      Teuchos::RCP<Epetra_MultiVector> dgdp_out = 
-		outArgs.get_DgDp(j,i).getMultiVector();
-	      if (dgdp_out != Teuchos::null) {
-		Derivative dfdp_dv = model_outargs.get_DfDp(i);
-		Teuchos::RCP<Epetra_Operator> dfdp_op = dfdp_dv.getLinearOp();
-		Teuchos::RCP<Epetra_MultiVector> dfdp = 
-		  dfdp_dv.getMultiVector();
-		Derivative dgdx_dv = model_outargs.get_DgDx(j);
-		EDerivativeMultiVectorOrientation dgdp_orient =
-		  outArgs.get_DgDp(j,i).getMultiVectorOrientation();
-		if (dfdp_op != Teuchos::null) {
-		  bool transpose = false;
-		  if (dgdp_orient == DERIV_MV_BY_COL)
-		    transpose = true;
-		  Epetra_MultiVector tmp(dfdp_op->OperatorDomainMap(),
-					 xbar->NumVectors());
-		  dfdp_op->SetUseTranspose(true);
-		  dfdp_op->Apply(*xbar, tmp);
-		  dfdp_op->SetUseTranspose(false);
-		  if (transpose) {
-		    TEUCHOS_TEST_FOR_EXCEPTION(
-		      dgdp_out->Map().DistributedGlobal(), 
-		      std::logic_error,
-		      std::endl <<
-		      "Piro::Epetra::NOXSolver::evalModel():  " <<
-		      "Can\'t handle special case:  " << 
-		      " df/dp operator, " <<
-		      " transposed, distributed dg/dp. " << std::endl);
-		    for (int j=0; j<dgdp_out->NumVectors(); j++)
-		      for (int i=0; i<dgdp_out->MyLength(); i++)
-			(*dgdp_out)[j][i] += tmp[i][j];
-		  }
-		  else
-		    dgdp_out->Update(1.0, tmp, 1.0);
-		}
-		else {
-		  Teuchos::RCP<Epetra_MultiVector> arg1, arg2;
-		  EDerivativeMultiVectorOrientation dgdp_orient =
-		    model_outargs.get_DgDp(j,i).getMultiVectorOrientation();
-		  EDerivativeMultiVectorOrientation dfdp_orient =
-		    model_outargs.get_DfDp(i).getMultiVectorOrientation();
-		  EDerivativeMultiVectorOrientation dgdx_orient =
-		    model_outargs.get_DgDx(j).getMultiVectorOrientation();
-		  char flag1, flag2;
-		  if (dgdp_orient == DERIV_TRANS_MV_BY_ROW) {
-		    arg1 = dfdp;
-		    arg2 = xbar;
-		    if (dfdp_orient == DERIV_TRANS_MV_BY_ROW)
-		      flag1 = 'N';
-		    else
-		      flag1 = 'T';
-		    if (dgdx_orient == DERIV_TRANS_MV_BY_ROW)
-		      flag2 = 'N';
-		    else
-		      flag2 = 'T';
-		  }
-		  else {
-		    arg1 = xbar;
-		    arg2 = dfdp;
-		    if (dgdx_orient == DERIV_TRANS_MV_BY_ROW)
-		      flag1 = 'T';
-		    else
-		      flag1 = 'N';
-		    if (dfdp_orient == DERIV_TRANS_MV_BY_ROW)
-		      flag2 = 'T';
-		    else
-		      flag2 = 'N';
-		    
-		  }
-		  dgdp_out->Multiply(flag1, flag2, 1.0, *arg1, *arg2, 1.0);
-		}
+	      TEUCHOS_TEST_FOR_EXCEPTION(
+	        model_outargs.get_DgDx(j).getLinearOp()!=Teuchos::null,
+	        std::logic_error,
+	        std::endl << "Piro::Epetra::NOXSolver::evalModel():  " <<
+	        "Can\'t use dg/dx operator " << j << " with non-operator " << 
+	        "adjoint sensitivities." << std::endl);
+	      Teuchos::RCP<Epetra_MultiVector> dgdx  = 
+	        model_outargs.get_DgDx(j).getMultiVector();
+	      if (dgdx != Teuchos::null) {
+	        int num_cols = dgdx->NumVectors();
+	      
+	        // (2) Calculate xbar multivector from -(J^{-T}*dg/dx)
+	        Teuchos::RCP<Epetra_MultiVector> xbar = 
+	          Teuchos::rcp(new Epetra_MultiVector(dgdx->Map(), num_cols));
+	        for (int col=0; col<num_cols; col++) {
+	          Teuchos::RCP<Epetra_Vector> gx =
+	            Teuchos::rcp((*dgdx)(col),false);
+	          Teuchos::RCP<Epetra_Vector> xb =
+	            Teuchos::rcp((*xbar)(col),false);
+	          NOX::Epetra::Vector dgdx_nox(
+	            gx, NOX::Epetra::Vector::CreateView, NOX::DeepCopy);
+	          NOX::Epetra::Vector xbar_nox(
+	            xb, NOX::Epetra::Vector::CreateView, NOX::DeepCopy);
+	        
+	          // Solve
+	          tls_strategy->applyJacobianTransposeInverse(
+	            *piroParams, dgdx_nox, xbar_nox);
+	        }
+	        xbar->Scale(-1.0);
+	      
+	        // (3) Calculate dg/dp^T = df/dp^T*xbar + dg/dp^T
+	        for (int i=0; i<num_p; i++) {
+	          if (!outArgs.supports(OUT_ARG_DgDp, j, i).none()) {
+	            Teuchos::RCP<Epetra_MultiVector> dgdp_out = 
+                outArgs.get_DgDp(j,i).getMultiVector();
+	            if (dgdp_out != Teuchos::null) {
+	      	      Derivative dfdp_dv = model_outargs.get_DfDp(i);
+	      	      Teuchos::RCP<Epetra_Operator> dfdp_op = dfdp_dv.getLinearOp();
+	      	      Teuchos::RCP<Epetra_MultiVector> dfdp = 
+	      	        dfdp_dv.getMultiVector();
+	      	      Derivative dgdx_dv = model_outargs.get_DgDx(j);
+	      	      EDerivativeMultiVectorOrientation dgdp_orient =
+	      	        outArgs.get_DgDp(j,i).getMultiVectorOrientation();
+	      	      if (dfdp_op != Teuchos::null) {
+	      	        bool transpose = false;
+	      	        if (dgdp_orient == DERIV_MV_BY_COL)
+	      	          transpose = true;
+	      	        Epetra_MultiVector tmp(dfdp_op->OperatorDomainMap(),
+	      	      			 xbar->NumVectors());
+	      	        dfdp_op->SetUseTranspose(true);
+	      	        dfdp_op->Apply(*xbar, tmp);
+	      	        dfdp_op->SetUseTranspose(false);
+	      	        if (transpose) {
+	      	          TEUCHOS_TEST_FOR_EXCEPTION(
+	      	            dgdp_out->Map().DistributedGlobal(), 
+	      	            std::logic_error,
+	      	            std::endl <<
+	      	            "Piro::Epetra::NOXSolver::evalModel():  " <<
+	      	            "Can\'t handle special case:  " << 
+	      	            " df/dp operator, " <<
+	      	            " transposed, distributed dg/dp. " << std::endl);
+	      	          for (int j=0; j<dgdp_out->NumVectors(); j++)
+	      	            for (int i=0; i<dgdp_out->MyLength(); i++)
+	      	      	(*dgdp_out)[j][i] += tmp[i][j];
+	      	        }
+	      	        else
+	      	          dgdp_out->Update(1.0, tmp, 1.0);
+	      	      }
+	      	      else {
+	      	        Teuchos::RCP<Epetra_MultiVector> arg1, arg2;
+	      	        EDerivativeMultiVectorOrientation dgdp_orient =
+	      	          model_outargs.get_DgDp(j,i).getMultiVectorOrientation();
+	      	        EDerivativeMultiVectorOrientation dfdp_orient =
+	      	          model_outargs.get_DfDp(i).getMultiVectorOrientation();
+	      	        EDerivativeMultiVectorOrientation dgdx_orient =
+	      	          model_outargs.get_DgDx(j).getMultiVectorOrientation();
+	      	        char flag1, flag2;
+	      	        if (dgdp_orient == DERIV_TRANS_MV_BY_ROW) {
+	      	          arg1 = dfdp;
+	      	          arg2 = xbar;
+	      	          if (dfdp_orient == DERIV_TRANS_MV_BY_ROW)
+	      	            flag1 = 'N';
+	      	          else
+	      	            flag1 = 'T';
+	      	          if (dgdx_orient == DERIV_TRANS_MV_BY_ROW)
+	      	            flag2 = 'N';
+	      	          else
+	      	            flag2 = 'T';
+	      	        }
+	      	        else {
+	      	          arg1 = xbar;
+	      	          arg2 = dfdp;
+	      	          if (dgdx_orient == DERIV_TRANS_MV_BY_ROW)
+	      	            flag1 = 'T';
+	      	          else
+	      	            flag1 = 'N';
+	      	          if (dfdp_orient == DERIV_TRANS_MV_BY_ROW)
+	      	            flag2 = 'T';
+	      	          else
+	      	            flag2 = 'N';
+	      	          
+	      	        }
+	      	        dgdp_out->Multiply(flag1, flag2, 1.0, *arg1, *arg2, 1.0);
+	      	      }
+	            }
+	          }
+	        }
 	      }
-	    }
-	  }
-	}
       }
     }
 

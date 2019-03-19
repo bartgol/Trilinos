@@ -148,7 +148,18 @@ NECoupledModelEvaluator(
   int nx = 0;
   for (int i=0; i<n_models; i++) {
     p_maps[i] = solvers[i]->get_p_map(p_indices[i]);
-    n_p[i] = p_maps[i]->NumGlobalElements();
+    if (p_maps[i]->GlobalIndicesInt()) {
+      n_p[i] = p_maps[i]->NumGlobalElements();
+    } else if (p_maps[i]->GlobalIndicesLongLong()) {
+      const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+      TEUCHOS_TEST_FOR_EXCEPTION(p_maps[i]->NumGlobalElements64()<=max_safe_long_long,
+                                 std::runtime_error,
+                                 "Error! The p_map uses long long global indices, and the p_map size is "
+                                 "larger than the largest int. This would cause overflow when casting to int.\n");
+      n_p[i] = static_cast<int>(p_maps[i]->NumGlobalElements64());
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the p_map are neither 'int' nor 'long long'.\n");
+    }
     nx += n_p[i];
   }
   x_map = Teuchos::rcp(new Epetra_Map(nx, 0, *comm));
@@ -164,7 +175,18 @@ NECoupledModelEvaluator(
   int nf = 0;
   for (int i=0; i<n_models; i++) {
     g_maps[i] = solvers[i]->get_g_map(g_indices[i]);
-    n_g[i] = g_maps[i]->NumGlobalElements();
+    if (g_maps[i]->GlobalIndicesInt()) {
+      n_g[i] = g_maps[i]->NumGlobalElements();
+    } else if (g_maps[i]->GlobalIndicesLongLong()) {
+      const long long max_safe_long_long = static_cast<long long>(Teuchos::OrdinalTraits<int>::max());
+      TEUCHOS_TEST_FOR_EXCEPTION(g_maps[i]->NumGlobalElements64()<=max_safe_long_long,
+                                 std::runtime_error,
+                                 "Error! The g_map uses long long global indices, and the g_map size is "
+                                 "larger than the largest int. This would cause overflow when casting to int.\n");
+      n_g[i] = static_cast<int>(g_maps[i]->NumGlobalElements64());
+    } else {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::logic_error, "Error! The global indices in the g_map are neither 'int' nor 'long long'.\n");
+    }
     nf += n_g[i];
   }
   f_map = Teuchos::rcp(new Epetra_Map(nf, 0, *comm));
