@@ -22,6 +22,7 @@ jobs:
           show-progress: false
           fetch-depth: 0
           ref: develop
+          token: ${{ secrets.E3SM_WORKFLOW_PAT }}
       - name: Add upstream repo
         run: git remote add upstream https://github.com/trilinos/trilinos
       - name: Fetch upstream repo
