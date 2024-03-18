@@ -32,19 +32,5 @@ jobs:
           git config --global user.name "Luca Bertagna"
       - name: Merge upstream develop
         run: git merge upstream/develop
-      - name: Create Pull Request
-        id: cpr
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.E3SM_WORKFLOW_PAT }}
-          branch: update-develop-${{ steps.date.outputs.DATE }}
-          delete-branch: true
-          base: develop
-          title: Merge trilinos/develop into e3sm-project/develop
-          body: Created by Github action
-      - name: Merge Pull Request
-        if: ${{ steps.cpr.outputs.pull-request-number }}
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
-          merge-method: rebase
+      - name: Push to remote
+        run: git push origin develop
