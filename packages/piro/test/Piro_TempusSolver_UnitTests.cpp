@@ -28,11 +28,12 @@
 #ifdef TEST_USE_EPETRA
 #include "Thyra_EpetraModelEvaluator.hpp"
 #include "MockModelEval_A.hpp"
-
 #include "Thyra_AmesosLinearOpWithSolveFactory.hpp"
 #else
 #include "MockModelEval_A_Tpetra.hpp"
+#include "Thyra_Amesos2LinearOpWithSolveFactory.hpp"
 #endif
+
 #include "Thyra_ModelEvaluatorHelpers.hpp"
 
 #include "Thyra_DefaultNominalBoundsOverrideModelEvaluator.hpp"
@@ -81,7 +82,12 @@ RCP<Thyra::ModelEvaluator<double> > defaultModelNew()
 RCP<Thyra::ModelEvaluator<double> > defaultModelNew()
 {
   auto comm = Tpetra::getDefaultComm();
-  return rcp(new MockModelEval_A_Tpetra(comm));
+  auto model = rcp(new MockModelEval_A_Tpetra(comm));
+
+  auto lowsFactory = rcp(new Thyra::Amesos2LinearOpWithSolveFactory<double>());
+  lowsFactory->setParameterList(rcp(new ParameterList()));
+
+  return Teuchos::rcp(new Thyra::DefaultModelEvaluatorWithSolveFactory<double>(model, lowsFactory));
 }
 #endif
 
@@ -180,6 +186,7 @@ const RCP<TempusSolver<double> > solverNew(
   tempusPL->sublist("Demo Stepper").set("Zero Initial Guess", false);
   tempusPL->sublist("Demo Stepper").set("Solver Name", "Demo Solver");
   tempusPL->sublist("Demo Stepper").sublist("Demo Solver").sublist("NOX").sublist("Direction").set("Method","Newton");
+
   Teuchos::RCP<Piro::TempusIntegrator<double> > integrator = Teuchos::rcp(new Piro::TempusIntegrator<double>(tempusPL, thyraModel));
   const RCP<const Tempus::SolutionHistory<double> > solutionHistory = integrator->getSolutionHistory();
   const RCP<const Tempus::TimeStepControl<double> > timeStepControl = integrator->getTimeStepControl();

@@ -406,11 +406,11 @@ void MockModelEval_A_Tpetra::evalModelImpl(
       for (int i=0; i<myVecLength; i++) {
         int gid = x_in->getMap()->getGlobalElement(i);
         
-        if (gid==0) { // f_0 = (x_0)^3 - p_0
-          f_out_data[i] = x[i] * x[i] * x[i] -  p[0];
+        if (gid==0) { // f_0 = (x_0)^2 - p_0
+          f_out_data[i] = x[i] * x[i] -  p[0];
         }
-        else // f_i = x_i * (1 + x_0 - p_0^(1/3)) - (i+p_1) - 0.5*(x_0 - p_0),  (for i != 0)
-          f_out_data[i] = x[i] - (gid + p[1]) - 0.5*(x0 - p[0]) + x[i] * (x0 - std::cbrt(p[0]));
+        else // f_i = (x_i)^2 - (i+p_1)^2
+          f_out_data[i] = x[i]*x[i] - (gid + p[1])*(gid + p[1]);
       }
     }
     if (W_out != Teuchos::null) {
@@ -421,18 +421,8 @@ void MockModelEval_A_Tpetra::evalModelImpl(
       
       double diag=0, extra_diag=0;
       for (int i=0; i<myVecLength; i++) {
-        auto gid = x_in->getMap()->getGlobalElement(i);
-        if(gid==0) {
-          diag = 3.0 * x0 * x0;
-          W_out_crs->replaceLocalValues(i, 1, &diag, &i);
-        } 
-        else {
-          diag = 1.0 + x0 - std::cbrt(p[0]);
-          W_out_crs->replaceLocalValues(i, 1, &diag, &i);
-          decltype(gid) col = 0;
-          extra_diag = -0.5 + x[i];
-          W_out_crs->replaceGlobalValues(gid, 1, &extra_diag, &col);
-        }
+        diag = 2.0 * x[i];
+        W_out_crs->replaceLocalValues(i, 1, &diag, &i);
       }
 
       if(!Teuchos::nonnull(x_dot_in))
@@ -643,6 +633,7 @@ void MockModelEval_A_Tpetra::evalModelImpl(
       }
     }
     if (W_out != Teuchos::null) {
+      std::cout << "adding -1 to W diag...\n";
       // W(x, x_dot) = beta * W(x) - alpha * Id
       const Teuchos::RCP<Tpetra_CrsMatrix> W_out_crs =
         Teuchos::rcp_dynamic_cast<Tpetra_CrsMatrix>(W_out, true);

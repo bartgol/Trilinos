@@ -273,7 +273,30 @@ void Piro::TempusSolver<Scalar>::initialize(
       }	
     }
     
-    // C.2) Create the Thyra-wrapped ModelEvaluator
+    // C.2) If either a) we wrapped the input model in a InvertMassMatrixDecorator or b) the input model is not
+    //      already a ModelEvaluatorWithSolveFactory, then create a Thyra-wrapped ModelEvaluator
+
+    if (model_ != in_model or Teuchos::rcp_dynamic_cast<Thyra::LinearOpWithSolveFactoryBase<Scalar>>(model_).is_null()) {
+    //
+    // *out_ << "\nB) Create the Stratimikos linear solver factory ...\n";
+    //
+    // This is the linear solve strategy that will be used to solve for the
+    // linear system with the W.
+    //
+    Stratimikos::DefaultLinearSolverBuilder linearSolverBuilder;
+
+#ifdef HAVE_PIRO_MUELU
+    Stratimikos::enableMueLu(linearSolverBuilder);
+#endif
+
+    linearSolverBuilder.setParameterList(sublist(tempusPL, "Stratimikos", true));
+    RCP<Thyra::LinearOpWithSolveFactoryBase<double> > lowsFactory = createLinearSolveStrategy(linearSolverBuilder);
+
+
+    thyraModel_ = rcp(new Thyra::DefaultModelEvaluatorWithSolveFactory<Scalar>(model_, lowsFactory));
+    } else {
+    }
+    const RCP<const Thyra::VectorSpaceBase<double> > x_space = thyraModel_->get_x_space();
 
     //
     *out_ << "\nD) Create the stepper and integrator for the forward problem ...\n";

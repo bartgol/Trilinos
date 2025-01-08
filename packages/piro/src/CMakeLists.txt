@@ -168,3 +168,10 @@ TRIBITS_ADD_LIBRARY(
   HEADERS ${HEADERS}
   SOURCES ${SOURCES}
   )
+
+get_target_property(link_list piro LINK_LIBRARIES)
+message ("piro links against: ${link_list}")
+foreach (lib IN LISTS link_list)
+  get_target_property(indir_link ${lib} INTERFACE_LINK_LIBRARIES)
+  message ("  ${lib}  links against: ${indir_link}")
+endforeach()
